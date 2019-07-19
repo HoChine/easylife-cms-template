@@ -1,6 +1,7 @@
 <template>
     <div class="menuConfig">
-        <el-button type="primary" @click="appendTopMenu">新建顶级菜单</el-button>
+        <el-button type="primary" @click="appendTopMenu('group')">新建顶级菜单组</el-button>
+        <el-button type="primary" @click="appendTopMenu('single')">新建顶级菜单</el-button>
         <div class="custom-tree-node tree-title mb20 mt20">
             <span class="ml30">菜单名称</span>
             <span>
@@ -25,29 +26,37 @@
                     <el-button
                             type="text"
                             size="mini"
-                            @click="() => handleMenuData('append', data)">
+                            v-if="data.menuType === 2"
+                            @click="() => handleMenuData('append', data, 'group')">
+                      添加子菜单组
+                    </el-button>
+                    <el-button
+                            type="text"
+                            size="mini"
+                            v-if="data.menuType === 2"
+                            @click="() => handleMenuData('append', data,'single')">
                       添加子菜单
                     </el-button>
                     <el-button
                             type="text"
                             size="mini"
-                            @click="() => handleMenuData('editor', data)">
+                            @click="() => handleMenuData('editor', data, data.menuType === 1? 'single':'group')">
                       编辑菜单
                     </el-button>
                     <el-button
                             type="text"
                             size="mini"
-                            @click="() => handleMenuData('remove', data, node)">删除菜单
+                            @click="() => removeMenuData(data, node)">删除菜单
                     </el-button>
                 </span>
             </span>
         </el-tree>
-        <el-dialog :title="currentMenuHandleType !== 'editor' ? '新建': '编辑' + '菜单'" width="500px" :visible.sync="dialogMenuFromVisible">
+        <el-dialog :title="(currentMenuHandleStatus !== 'editor' ? '新建': '编辑') + (currentMenuHandleType === 'single' ?'菜单':'菜单组')" width="500px" :visible.sync="dialogMenuFromVisible">
             <el-form :model="menuFrom" ref="menuFrom">
                 <el-form-item label="菜单名称" label-width="80">
                     <el-input class="w380" v-model="menuFrom.name" autocomplete="off"></el-input>
                 </el-form-item>
-                <el-form-item label="菜单路径" label-width="80">
+                <el-form-item label="菜单路径" label-width="80" v-if="currentMenuHandleType === 'single'">
                     <el-input class="w380" v-model="menuFrom.path" autocomplete="off">
                         <template slot="prepend">/</template>
                     </el-input>
@@ -58,7 +67,7 @@
                 <el-button type="primary" @click="saveMenuFrom">确 定</el-button>
             </div>
         </el-dialog>
-        <el-button @click="save">save</el-button>
+        {{menuData}}
     </div>
 </template>
 
@@ -76,7 +85,8 @@
                     path: ""
                 },
                 currentMenuData: {},
-                currentMenuHandleType: 'append',
+                currentMenuHandleStatus: 'append',
+                currentMenuHandleType: 'single',
                 dialogMenuFromVisible: false,
                 menuData: [],
             };
@@ -88,11 +98,9 @@
 
         },
         methods: {
-            save() {
-                console.log(this.menuData, JSON.stringify(this.menuData));
-            },
-            appendTopMenu() {
-                this.currentMenuHandleType = 'appendTop';
+            appendTopMenu(type) {
+                this.currentMenuHandleStatus = 'appendTop';
+                this.currentMenuHandleType = type;
                 this.dialogMenuFromVisible = true;
                 this.menuFrom = {name: "", path: ""};
             },
@@ -101,63 +109,83 @@
                     this.$message.warning('请输入菜单名称');
                     return false;
                 }
+                if (!this.menuFrom.path && this.currentMenuHandleType === 'single') {
+                    this.$message.warning('请输入菜单路径');
+                    return false;
+                }
                 // 添加顶级菜单
-                if (this.currentMenuHandleType === 'appendTop') {
-                    this.menuData.push({
-                        id: +new Date(),
-                        name: this.menuFrom.name,
-                        level: 1,
-                        path: this.menuFrom.path,
-                        children: []
-                    })
-                } else if (this.currentMenuHandleType === 'append') {
-                    const newChild = {
-                        id: +new Date(),
-                        name: this.menuFrom.name,
-                        level: this.currentMenuData.level + 1,
-                        path: this.menuFrom.path,
-                        children: []
-                    };
-                    if (!this.currentMenuData.children) {
-                        this.$set(this.handleMenuData, 'children', []);
-                    }
-                    this.currentMenuData.children.push(newChild);
+                if (this.currentMenuHandleStatus === 'appendTop') {
+                    let menu = this.currentMenuHandleType === 'single'
+                        ? {
+                            id: +new Date(),
+                            name: this.menuFrom.name,
+                            path: this.menuFrom.path,
+                            menuType: 1,
+                            level: 1,
+                        }
+                        : {
+                            id: +new Date(),
+                            name: this.menuFrom.name,
+                            children: [],
+                            menuType: 2,
+                            level: 1,
+                        };
+                    this.menuData.push(menu);
+                } else if (this.currentMenuHandleStatus === 'append') {
+                    let newMenu = this.currentMenuHandleType === 'single'
+                        ? {
+                            id: +new Date(),
+                            name: this.menuFrom.name,
+                            path: this.menuFrom.path,
+                            menuType: 1,
+                            level: this.currentMenuData.level + 1,
+                        }
+                        : {
+                            id: +new Date(),
+                            name: this.menuFrom.name,
+                            children: [],
+                            menuType: 2,
+                            level: this.currentMenuData.level + 1,
+                        };
+                    this.currentMenuData.children.push(newMenu);
                 } else {
                     this.currentMenuData.name = this.menuFrom.name;
-                    this.currentMenuData.path = this.menuFrom.path;
+                    if (this.currentMenuHandleType === 'single') {
+                        this.currentMenuData.path = this.menuFrom.path;
+                    }
                 }
-                //this.$message.success((this.currentMenuHandleType !== 'editor' ? '新建' : '编辑') + '成功');
+                //this.$message.success((this.currentMenuHandleStatus !== 'editor' ? '新建' : '编辑') + '成功');
                 this.dialogMenuFromVisible = false;
             },
             allowDrop(draggingNode, dropNode, type) {
+                // 如果是菜单 直接禁止
+                if(dropNode.data.menuType === 1){
+                    return false
+                }
                 if (draggingNode.data.level === dropNode.data.level) {
                     return type !== 'inner'
                 } else if (draggingNode.data.level - 1 === dropNode.data.level) {
                     return type === 'inner'
                 }
             },
-            handleMenuData(type, data, node) {
-                if (type === 'remove') {
-                    this.$confirm('此操作将同时删除该菜单下的所有子菜单, 是否继续?', '提示', {
-                        confirmButtonText: '确定删除',
-                        cancelButtonText: '取消',
-                        type: 'warning'
-                    }).then(() => {
-                        const parent = node.parent;
-                        const children = parent.data.children || parent.data;
-                        const index = children.findIndex(d => d.id === data.id);
-                        children.splice(index, 1);
-                        this.$message({
-                            type: 'success',
-                            message: '删除成功!'
-                        });
-                    });
-                } else {
-                    this.menuFrom = type === 'editor' ? {name: data.name, path: data.path} : {name: "", path: ""};
-                    this.dialogMenuFromVisible = true;
-                    this.currentMenuHandleType = type;
-                    this.currentMenuData = data;
-                }
+            removeMenuData(data, node) {
+                this.$confirm('此操作将同时删除该菜单下的所有子菜单, 是否继续?', '提示', {
+                    confirmButtonText: '确定删除',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const parent = node.parent;
+                    const children = parent.data.children || parent.data;
+                    const index = children.findIndex(d => d.id === data.id);
+                    children.splice(index, 1);
+                });
+            },
+            handleMenuData(status, data, type) {
+                this.menuFrom = status === 'editor' ? {name: data.name, path: data.path} : {name: "", path: ""};
+                this.currentMenuHandleType = type;
+                this.dialogMenuFromVisible = true;
+                this.currentMenuHandleStatus = status;
+                this.currentMenuData = data;
             }
         },
         components: {},
